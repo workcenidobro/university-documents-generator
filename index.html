@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Генератор Документів Університету — Manus</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- jsPDF library for generating PDFs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5; /* Light gray background for the main page */
+        }
+        /* Custom styles for the message box */
+        #message-box {
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+        .preview-container {
+            transition: all 0.3s ease-in-out;
+            filter: blur(5px);
+            opacity: 0.5;
+            transform: scale(0.98);
+        }
+        .preview-container.visible {
+            filter: blur(0);
+            opacity: 1;
+            transform: scale(1);
+        }
+        /* Simple spinner for the image placeholder */
+        .loading-img {
+            animation: pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: .5;
+            }
+        }
+        /* Print-specific styles for PDF/PNG generation */
+        @media print {
+            body {
+                background-color: #fff;
+            }
+            .no-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+    <div class="flex flex-col lg:flex-row w-full min-h-screen">
+        <!-- Left Panel: Controls (Не друкувати) -->
+        <div class="w-full lg:w-1/3 bg-white p-6 lg:p-8 shadow-lg no-print">
+            <h1 class="text-2xl font-bold mb-6 text-indigo-700">Генератор Документів Університету</h1>
+            
+            <div class="space-y-4">
+         
+                <div>
+                    <label for="college-name" class="block text-sm font-medium text-gray-600">Назва університету</label>
+                    <!-- Readonly field for display -->
+                    <input type="text" id="college-name" readonly class="mt-1 block w-full bg-gray-100 border border-gray-300 rounded-lg shadow-sm py-2 px-3 focus:outline-none sm:text-sm text-gray-700 font-semibold">
+                </div>
+              
+                <div>
+                    <label for="student-name" class="block text-sm font-medium text-gray-600">Ім'я студента</label>
+                    <!-- Readonly field for display -->
+                    <input type="text" id="student-name" readonly class="mt-1 block w-full bg-gray-100 border border-gray-300 rounded-lg shadow-sm py-2 px-3 focus:outline-none sm:text-sm text-gray-700 font-semibold">
+                </div>
+                <div>
+   
+                  <label for="enrollment-no" class="block text-sm font-medium text-gray-600">Номер студентського квитка (Enrollment No.)</label>
+                    <!-- Readonly field for display -->
+                    <input type="text" id="enrollment-no" readonly class="mt-1 block w-full bg-gray-100 border border-gray-300 rounded-lg shadow-sm py-2 px-3 focus:outline-none sm:text-sm text-gray-700 font-semibold">
+                </div>
+                <div>
+        
+                 <label for="program-name" class="block text-sm font-medium text-gray-600">Програма навчання (Program)</label>
+                    <!-- Readonly field for display -->
+                    <input type="text" id="program-name" readonly class="mt-1 block w-full bg-gray-100 border border-gray-300 rounded-lg shadow-sm py-2 px-3 focus:outline-none sm:text-sm text-gray-700 font-semibold">
+                </div>
+            </div>
+
+            <div class="mt-8 space-y-3">
+     
+                <button id="generate-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center space-x-2 transition-colors duration-200 shadow-md hover:shadow-lg">
+                    <svg id="spinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span id="btn-text">Згенерувати Документи</span>
+                </button>
+      
+                <button id="save-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center space-x-2 transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-md hover:shadow-lg" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+  
+                    </svg>
+                    <span>Зберегти Всі Документи (.zip)</span>
+                </button>
+                <div id="status-text" class="text-center text-gray-500 text-sm h-5 font-medium mt-2">Натисніть "Згенерувати Документи"</div>
+            </div>
+        </div>
+
+ 
+        <!-- Right Panel: Previews (Попередній Перегляд) -->
+        <div class="w-full lg:w-2/3 bg-gray-100 p-6 lg:p-8 overflow-y-auto">
+            <h2 class="text-xl font-bold mb-6 text-gray-700">Попередній Перегляд Документів</h2>
+            <!-- Wraps around the two columns, adding a grid layout and ensuring responsiveness -->
+            <div id="previews-wrapper" class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                
+                <!-- ID Card Preview -->
+    
+                <div id="preview-id-card-wrapper" class="preview-container">
+                    <h3 class="font-semibold mb-2 text-gray-700">ПОСВІДЧЕННЯ ОСОБИ (ID CARD)</h3>
+                    <!-- ID Card structure: small, credit-card like box -->
+                    <div id="id-card-content" class="relative bg-white p-4 rounded-xl shadow-lg max-w-sm mx-auto h-[180px] flex items-center justify-start space-x-4 border-2 border-indigo-200">
+                        <!-- Top-left logo and university name -->
+                        <div class="absolute top-3 left-4 flex items-center space-x-2">
+                            <img id="id-card-logo" src="https://placehold.co/32x32/E2E8F0/4A5568?text=LOGO" class="rounded-full w-8 h-8 object-contain" alt="University Logo">
+                            <!-- REDUCED FONT SIZE HERE: text-base -> text-sm -->
+                            <h4 id="id-card-university" class="font-bold text-sm text-indigo-700">Назва Університету</h4>
+ 
+                        </div>
+                        <!-- Top-right semi-transparent seal/logo placeholder -->
+                        <img src="https://placehold.co/40x40/E2E8F0/4A5568?text=SEAL" class="absolute top-3 right-4 opacity-10 w-10 h-10 object-contain" alt="University Seal Placeholder">
+
+             
+                        <!-- Student Photo -->
+                        <img id="id-card-photo" src="https://placehold.co/80x100/E2E8F0/4A5568?text=Photo" class="w-20 h-24 rounded-lg border-2 border-gray-400 object-cover mt-8 ml-4 shadow-inner" alt="Student Photo">
+                        
+                        <!-- Student Details -->
+                        <div class="flex flex-col text-[10px] text-gray-700 mt-8">
+                            <p class="mb-1"><strong>НОМЕР СК</strong> <span id="id-card-enroll" class="font-medium text-indigo-600">XXXX-XXXX-XXXX</span></p>
+                            <p class="mb-1"><strong>ІМ'Я</strong> <span id="id-card-name" class="font-extrabold text-sm text-gray-900">ІМ'Я СТУДЕНТА</span></p>
+   
+                            <p class="mb-1"><strong>ПРОГРАМА</strong> <span id="id-card-program" class="font-medium">ПРОГРАМА</span></p>
+                            <div class="flex justify-between w-full mt-2 space-x-4">
+                                <p><strong>ДАТА НАРОДЖ.</strong> <span id="id-card-dob" class="font-medium">ДД/ММ/РРРР</span></p>
+  
+                               <p><strong>ДІЙСНИЙ ДО</strong> <span id="id-card-valid-thru" class="font-medium">ММ/РРРР</span></p>
+                            </div>
+                        </div>
+              
+                    </div>
+                </div>
+                <!-- Data File Preview -->
+                <div id="preview-data-file-wrapper" class="preview-container">
+                    <h3 class="font-semibold mb-2 text-gray-700">Файл Даних (info.txt)</h3>
+               
+                     <div class="bg-gray-800 text-green-300 p-4 rounded-lg shadow-md font-mono text-xs overflow-x-auto border border-gray-700">
+                        <pre id="data-file-content">Натисніть "Згенерувати Документи", щоб оновити дані.</pre>
+                    </div>
+                </div>
+
+                <!-- Fee Receipt Preview -->
+       
+                      <div id="preview-fee-receipt-wrapper" class="preview-container">
+                    <h3 class="font-semibold mb-2 text-gray-700">КВИТАНЦІЯ ПРО ОПЛАТУ</h3>
+                    <div id="fee-receipt-content" class="bg-white p-8 rounded-xl shadow-lg max-w-md mx-auto relative border border-gray-200">
+                        <div class="text-center mb-8 border-b pb-4">
+           
+                              <img id="receipt-logo" src="https://placehold.co/64x64/E2E8F0/4A5568?text=LOGO" class="h-16 mx-auto mb-4 object-contain" alt="University Seal">
+                            <!-- REDUCED FONT SIZE HERE: text-2xl -> text-xl -->
+                            <h4 id="receipt-university" class="font-bold text-xl text-indigo-800">Назва Університету</h4>
+                            <p class="text-sm text-gray-500 font-semibold mt-1">КВИТАНЦІЯ ПРО ОПЛАТУ</p>
+            
+                          </div>
+                        <div class="flex justify-between text-sm mb-6 bg-gray-50 p-3 rounded-md">
+                            <div>
+                                
+                                <p class="mb-1"><strong>Дата:</strong> <span id="receipt-date" class="font-medium">ДД/ММ/РРРР</span></p>
+                                <p><strong>Номер СК:</strong> <span id="receipt-enroll" class="font-medium text-indigo-600">XXXX-XXXX-XXXX</span></p>
+                            </div>
+                            <div class="text-right">
+      
+                               <p class="mb-1"><strong>Ім'я:</strong> <span id="receipt-name" class="font-medium">Ім'я Студента</span></p>
+                                <p><strong>Програма:</strong> <span id="receipt-program" class="font-medium">Програма</span></p>
+                            </div>
+          
+                      </div>
+                        <div class="border-t border-b border-gray-300 py-4 mb-4">
+                            <h5 class="text-sm font-semibold mb-2 text-gray-700">Призначення платежу:</h5>
+                        
+                          <p class="text-xs text-gray-600">Оплата за навчання та інші збори за семестр.</p>
+                        </div>
+                        <table class="w-full text-sm">
+                            <thead>
+         
+                                <tr class="border-b-2 border-t bg-gray-100">
+                                    <th class="text-left py-2 px-2 text-gray-700">Опис</th>
+                                    <th class="text-right py-2 px-2 text-gray-700">Сума (₴)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+          
+                                <tr class="border-b">
+                                    <td class="py-2 px-2">Плата за навчання та інші збори</td>
+                                    <td id="receipt-amount" class="text-right py-2 px-2 font-medium">₴0.00</td>
+                                </tr>
+                                <tr class="bg-indigo-50/50">
+                                  
+                                     <td class="py-2 px-2 font-bold text-base text-indigo-800">ВСЬОГО СПЛАЧЕНО</td>
+                                    <td id="receipt-total" class="text-right py-2 px-2 font-bold text-base text-indigo-800">₴0.00</td>
+                                </tr>
+                       
+                       </tbody>
+                        </table>
+                        <div class="mt-12 text-right text-sm relative">
+                            <!-- Adjusted signature image size to 300x100 (double the original 150x50) -->
+    
+                            <img id="receipt-signature" src="https://placehold.co/300x100/E2E8F0/4A5568?text=Signature" class="absolute bottom-10 right-0 w-36 h-12 object-contain loading-img z-10" alt="Authorized Signature">
+                            <p class="relative z-0 border-t border-gray-400 pt-1 w-48 ml-auto">____________________</p>
+                            <p class="mt-1 relative z-0 text-gray-600">Підпис уповноваженої особи</p>
+  
+                          </div>
+                    </div>
+                </div>
+
+                <!-- Class Schedule Preview -->
+                <div id="preview-schedule-wrapper" class="preview-container">
+    
+                       <h3 class="font-semibold mb-2 text-gray-700">РОЗКЛАД ЗАНЯТЬ</h3>
+                    <div id="class-schedule-content" class="bg-white p-8 rounded-xl shadow-lg max-w-md mx-auto relative border border-gray-200">
+                        <div class="text-center mb-6 border-b pb-4">
+                        
+                              <img id="schedule-logo" src="https://placehold.co/48x48/E2E8F0/4A5568?text=LOGO" class="h-12 mx-auto mb-2 object-contain" alt="University Seal">
+                            <!-- REDUCED FONT SIZE HERE: text-lg -> text-base -->
+                            <h4 id="schedule-university" class="font-bold text-base text-indigo-800">Назва Університету</h4>
+                            <p class="font-semibold text-gray-700 mt-2 text-base">РОЗКЛАД ЗАНЯТЬ</p>
+                        
+                        </div>
+                        <div class="text-xs mb-4 p-3 bg-gray-50 rounded-md">
+                            <p class="mb-1"><strong>Ім'я Студента:</strong> <span id="schedule-name" class="font-medium">Ім'я Студента</span></p>
+                            <p class="mb-1"><strong>Номер СК:</strong> <span id="schedule-enroll" class="font-medium text-indigo-600">XXXX-XXXX-XXXX</span></p>
+          
+                       <p class="mb-1"><strong>Семестр:</strong> <span id="schedule-semester" class="font-medium">XXXX Семестр</span></p>
+                            <p><strong>Дата Видачі:</strong> <span id="schedule-date" class="font-medium">ДД/ММ/РРРР</span></p>
+                        </div>
+                        
+                        <table class="w-full text-sm border-t border-b">
+                            <thead>
+                                <tr class="border-b bg-indigo-100/50">
+                                   
+                                     <th class="text-left py-2 px-2 border-b text-gray-700">КОД</th>
+                                    <th class="text-left py-2 px-2 border-b text-gray-700">НАЗВА ПРЕДМЕТА</th>
+                                    <th class="text-left py-2 px-2 border-b text-gray-700">АУДИТОРІЯ</th>
+           
+                          </tr>
+                            </thead>
+                            <tbody id="schedule-courses-tbody">
+                      
+                             <!-- Courses will be injected here -->
+                            </tbody>
+                        </table>
+                        <div class="mt-12 text-right text-sm relative">
+    
+                            <img id="schedule-signature" src="https://placehold.co/300x100/E2E8F0/4A5568?text=Signature" class="absolute bottom-10 right-0 w-36 h-12 object-contain loading-img z-10" alt="Authorized Signature">
+                            <p class="relative z-0 border-t border-gray-400 pt-1 w-48 ml-auto">____________________</p>
+                            <p class="mt-1 relative z-0 text-gray-600">Підпис уповноваженої особи</p>
+  
+                          </div>
+                    </div>
+                </div>
+	            </div>
+	        </div>
+	    </div>
+    <!-- Custom Message Box -->
+    <div id="message-box" class="fixed bottom-5 right-5 bg-red-600 border-red-800 text-white py-3 px-5 rounded-lg shadow-lg opacity-0 transform translate-y-2 max-w-sm hidden z-50">
+        <div class="flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+       
+                 <p id="message-text" class="font-medium"></p>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA FOR REALISTIC GENERATION (Дані для генерації) ---
+        const ukrainianUniversities = [
+            "Київський національний університет імені Тараса Шевченка", 
+            "Національний технічний університет України «Київський політехнічний інститут імені Ігоря Сікорського»", 
+            "Львівський національний університет імені Івана Франка", 
+            "Національний університет «Києво-Могилянська академія»", 
+            "Харківський національний університет імені В. Н. Каразіна",
+            "Одеський національний університет імені І. І. Мечникова"
+        ];
+        // Common Ukrainian male and female names
+        const maleFirstNames = [
+            "Олександр", "Максим", "Дмитро", "Артем", "Владислав", "Андрій", "Іван", "Кирило", "Євген"
+        ];
+        const femaleFirstNames = [
+            "Анастасія", "Софія", "Марія", "Вікторія", "Анна", "Юлія", "Дарина", "Олена", "Тетяна"
+        ];
+        const lastNames = [
+            "Шевченко", "Коваленко", "Бондаренко", "Ткаченко", "Мельник", "Петренко", "Савченко", "Поліщук"
+        ];
+        const programs = [
+            "Комп'ютерні науки", "Медицина", "Право", "Архітектура", "Менеджмент",
+            "Психологія", "Економіка", "Філологія", "Цивільна інженерія", "Біомедичні науки"
+        ];
+        const courses = [
+            { code: 'CS-101', name: 'Вступ до програмування', location: 'Лаб. 1' },
+            { code: 'FIL-202', name: 'Академічне письмо', location: 'Ауд. 205' },
+            { code: 'HIM-105', name: 'Загальна хімія', location: 'Лекц. Зал A' },
+            { code: 'BIO-110', name: 'Основи біології', location: 'Лаб. 3' },
+            { code: 'PSY-201', name: 'Вступ до психології', location: 'Ауд. 302' },
+            { code: 'ART-101', name: 'Історія мистецтв', location: 'Студія 5' },
+            { code: 'MATH-150', name: 'Математичний аналіз I', location: 'Ауд. 101' },
+            { code: 'FIZ-201', name: 'Фізика для інженерів', location: 'Ауд. 203' }
+        ];
+        const deptCodes = ["КН", "ФІЛ", "МАТ", "ФІЗ", "БІО", "ХІМ", "ПСИ", "АРХ"];
+
+        // --- UI Elements (Елементи інтерфейсу) ---
+        const generateBtn = document.getElementById('generate-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const btnText = document.getElementById('btn-text');
+        const spinner = document.getElementById('spinner');
+        const statusText = document.getElementById('status-text');
+        const previewWrappers = document.querySelectorAll('.preview-container');
+
+        // Input fields (Поля введення/відображення)
+        const collegeInput = document.getElementById('college-name');
+        const nameInput = document.getElementById('student-name');
+        const enrollInput = document.getElementById('enrollment-no');
+        const programInput = document.getElementById('program-name');
+
+        // ID Card elements (Елементи посвідчення)
+        const idCardUniversity = document.getElementById('id-card-university');
+        const idCardName = document.getElementById('id-card-name');
+        const idCardEnroll = document.getElementById('id-card-enroll');
+        const idCardProgram = document.getElementById('id-card-program');
+        const idCardPhoto = document.getElementById('id-card-photo');
+        const idCardLogo = document.getElementById('id-card-logo');
+        const idCardDob = document.getElementById('id-card-dob');
+        const idCardValidThru = document.getElementById('id-card-valid-thru');
+
+        // Data file element (Елемент файлу даних)
+        const dataFileContent = document.getElementById('data-file-content');
+        let currentTxtContent = ''; // Variable to hold the text for the .txt file
+
+        // Receipt elements (Елементи квитанції)
+        const receiptUniversity = document.getElementById('receipt-university');
+        const receiptDate = document.getElementById('receipt-date');
+        const receiptEnroll = document.getElementById('receipt-enroll');
+        const receiptName = document.getElementById('receipt-name');
+        const receiptProgram = document.getElementById('receipt-program');
+        const receiptAmount = document.getElementById('receipt-amount');
+        const receiptTotal = document.getElementById('receipt-total');
+        const receiptLogo = document.getElementById('receipt-logo');
+        const receiptSignature = document.getElementById('receipt-signature');
+        
+        // Class Schedule elements (Елементи розкладу)
+        const scheduleUniversity = document.getElementById('schedule-university');
+        const scheduleName = document.getElementById('schedule-name');
+        const scheduleEnroll = document.getElementById('schedule-enroll');
+        const scheduleSemester = document.getElementById('schedule-semester');
+        const scheduleDate = document.getElementById('schedule-date');
+        const scheduleCoursesBody = document.getElementById('schedule-courses-tbody');
+        const scheduleLogo = document.getElementById('schedule-logo');
+        const scheduleSignature = document.getElementById('schedule-signature');
+
+        // --- Helper Functions (Допоміжні функції) ---
+
+        /**
+         * Displays a custom message box with a fade-in/fade-out animation.
+         * @param {string} message The message to display.
+         */
+        const showMessage = (message) => {
+            const messageBox = document.getElementById('message-box');
+            const messageText = document.getElementById('message-text');
+
+            messageText.textContent = message;
+            messageBox.classList.remove('hidden', 'opacity-0', 'translate-y-2');
+            messageBox.classList.add('opacity-100', 'translate-y-0');
+            setTimeout(() => {
+                messageBox.classList.remove('opacity-100', 'translate-y-0');
+                messageBox.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => {
+                    messageBox.classList.add('hidden');
+                }, 300); // Wait for the fade-out transition
+   
+            }, 3000);
+        };
+        
+        /**
+         * Simulates fetching an image from a URL and converts it to base64 (for fallbacks).
+         * @param {string} url The image URL.
+         * @returns {Promise<string>} A promise that resolves with the base64 data URL.
+         */
+        const getBase64Image = async (url) => {
+            try {
+                // Fetch the image to bypass CORS issues on the browser side and avoid security errors
+                const response = await fetch(url);
+                const blob = await response.blob();
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    
+                    reader.readAsDataURL(blob);
+                });
+            } catch (error) {
+                console.error('Failed to fetch image:', error);
+                // Fallback to a data URL for a simple gray box to avoid breaking the PDF generation
+                const fallbackDataUrl = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="#E2E8F0" /><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="12" fill="#4A5568">Image</text></svg>';
+                return fallbackDataUrl;
+            }
+        };
+
+        /**
+         * Retries a fetch call with exponential backoff.
+         * @param {string} url The URL to fetch.
+         * @param {object} options The fetch options (method, headers, body).
+         * @param {number} retries The maximum number of retries.
+         * @param {number} delay The initial delay in ms.
+         * @returns {Promise<Response>} The fetch response.
+         */
+        const fetchWithRetry = async (url, options, retries = 3, delay = 1000) => {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response;
+            } catch (error) {
+                if (retries === 0) throw error;
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return fetchWithRetry(url, options, retries - 1, delay * 2);
+            }
+        };
+
+        // Локальные изображения были созданы Manus и лежат рядом с этим HTML-файлом.
+        const manusImages = {
+            femalePhoto: 'manus-assets/student-photo.png',
+            malePhoto: 'manus-assets/student-photo-male.png',
+            signature: 'manus-assets/authorized-signature.png',
+            logo: 'manus-assets/university-logo.png'
+        };
+
+        /**
+         * Returns a locally stored Manus image instead of calling Gemini from the browser.
+         * @param {string} prompt The original image prompt.
+         * @param {string} fallbackUrl A placeholder URL kept for compatibility with the original code.
+         * @returns {Promise<string>} A local path to the required image.
+         */
+        const generateImage = async (prompt, fallbackUrl) => {
+            const text = prompt.toLowerCase();
+            if (text.includes('signature')) return manusImages.signature;
+            if (text.includes('logo')) return manusImages.logo;
+            return text.includes('ukrainian man') ? manusImages.malePhoto : manusImages.femalePhoto;
+        };
+
+        /**
+         * Generates a PDF from a given HTML element and adds it to the ZIP file.
+         * @param {string} elementId The ID of the HTML element to convert.
+         * @param {string} fileName The name of the file in the ZIP.
+         * @returns {Promise<void>} A promise that resolves when the PDF is added.
+         */
+        const generateAndAddPdf = async (elementId, fileName) => {
+            const element = document.getElementById(elementId);
+
+            // Capture a temporary frame so the PDF keeps the rounded card, shadow,
+            // and the light preview background visible in the browser.
+            const captureFrame = document.createElement('div');
+            captureFrame.style.cssText = [
+                'position: fixed',
+                'left: -10000px',
+                'top: 0',
+                'display: inline-block',
+                'padding: 12px',
+                'background: #f3f4f6'
+            ].join(';');
+
+            const cardClone = element.cloneNode(true);
+            cardClone.style.width = `${element.offsetWidth}px`;
+            cardClone.style.height = `${element.offsetHeight}px`;
+            cardClone.style.maxWidth = 'none';
+            cardClone.style.margin = '0';
+            captureFrame.appendChild(cardClone);
+            document.body.appendChild(captureFrame);
+
+            try {
+                const canvas = await html2canvas(captureFrame, {
+                    scale: 3,
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#f3f4f6'
+                });
+                const imgData = canvas.toDataURL('image/png');
+
+                // The page ratio comes from the actual capture. This prevents
+                // the empty bands above and below the ID card in the old PDF.
+                const pdfWidth = 100;
+                const pdfHeight = pdfWidth * (canvas.height / canvas.width);
+                const orientation = pdfWidth >= pdfHeight ? 'landscape' : 'portrait';
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation,
+                    unit: 'mm',
+                    format: [pdfWidth, pdfHeight]
+                });
+
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                zip.file(fileName, pdf.output('blob'));
+            } finally {
+                captureFrame.remove();
+            }
+        };
+
+        // --- Main Generation Logic (Основна логіка генерації) ---
+        generateBtn.addEventListener('click', async () => {
+            generateBtn.disabled = true;
+            saveBtn.disabled = true;
+            btnText.textContent = 'Генерація...';
+            spinner.classList.remove('hidden');
+            statusText.textContent = 'Завантаження даних...';
+
+           
+            // Reset preview animations
+            previewWrappers.forEach(el => el.classList.remove('visible'));
+            
+            // Set loading images for dynamic content
+            const loadingPlaceholder = "https://placehold.co/1x1/E2E8F0/4A5568?text=Loading";
+            idCardPhoto.src = loadingPlaceholder;
+            idCardLogo.src = loadingPlaceholder;
+            receiptLogo.src = loadingPlaceholder;
+            receiptSignature.src = loadingPlaceholder;
+            scheduleLogo.src = loadingPlaceholder;
+            scheduleSignature.src = loadingPlaceholder;
+            receiptSignature.classList.add('loading-img');
+            scheduleSignature.classList.add('loading-img');
+
+            // 1. Generate random data
+            const isMale = Math.random() < 0.5;
+            const studentFirstName = isMale ? maleFirstNames[Math.floor(Math.random() * maleFirstNames.length)] : femaleFirstNames[Math.floor(Math.random() * femaleFirstNames.length)];
+            const studentLastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+         
+            const university = ukrainianUniversities[Math.floor(Math.random() * ukrainianUniversities.length)];
+            const program = programs[Math.floor(Math.random() * programs.length)];
+            const currentYear = new Date().getFullYear();
+            // Example enrollment number logic (e.g., КН-1234-2024)
+            const enrollmentNo = `${deptCodes[Math.floor(Math.random() * deptCodes.length)]}-${Math.floor(1000 + Math.random() * 9000)}-${currentYear}`;
+            // Date format DD/MM/YYYY
+            const dob = `${Math.floor(1 + Math.random() * 28).toString().padStart(2, '0')}/${Math.floor(1 + Math.random() * 12).toString().padStart(2, '0')}/${Math.floor(1995 + Math.random() * 10)}`;
+            // Valid thru format MM/YYYY (4 years validity)
+            const validThru = `${(new Date().getMonth() + 1).toString().padStart(2, '0')}/${currentYear + 4}`;
+            // Use Ukrainian locale for date string
+            const today = new Date().toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const semester = `${currentYear}-${currentYear + 1} Навчальний Рік`;
+            
+            // Randomly select 4 courses
+            const selectedCourses = [];
+            const coursesCopy = [...courses];
+            for (let i = 0; i < 4; i++) {
+                const randomIndex = Math.floor(Math.random() * coursesCopy.length);
+            selectedCourses.push(coursesCopy.splice(randomIndex, 1)[0]);
+            }
+            
+            // Generate a random amount between 15,000 and 45,000 UAH
+            const randomAmount = (Math.floor(Math.random() * 30001) + 15000);
+
+            // 2. Use locally stored images created with Manus
+            statusText.textContent = 'Завантаження зображень Manus...';
+            const [
+                photoBase64,
+                signatureBase64,
+                universityLogoBase64
+            ] = await Promise.all([
+                // Student Photo Prompt - explicitly Ukrainian student
+                generateImage(
+                    `a highly realistic passport photo of a young ${isMale ? 'Ukrainian man' : 'Ukrainian woman'} with a friendly, professional expression. The background is a solid light gray. Full face visible, well-lit. University student style.`,
+                    "https://placehold.co/80x100/E2E8F0/4A5568?text=Photo"
+                ),
+                
+                // Signature Prompt
+                generateImage(
+                    `A highly realistic, professional, complex handwritten signature in black ink on a white background. It should look like an authorized director's signature.`,
+                    "https://placehold.co/300x100/E2E8F0/4A5568?text=Signature"
+                ),
+                
+                // University Logo Prompt (Program theme is included for variety)
+                generateImage(
+                    `a modern, clean university logo for an Ukrainian university with the theme of ${program}. It should be a simple, professional, abstract icon without any text. Use colors suitable for a serious academic institution.`,
+                    "https://placehold.co/64x64/E2E8F0/4A5568?text=LOGO"
+                )
+            ]);
+            
+            statusText.textContent = 'Оновлення документів...';
+
+            // 3. Update input fields
+            collegeInput.value = university;
+            nameInput.value = `${studentFirstName} ${studentLastName}`;
+            enrollInput.value = enrollmentNo;
+            programInput.value = program;
+            
+            // 4. Update ID Card
+            idCardUniversity.textContent = university;
+            idCardName.textContent = `${studentFirstName.toUpperCase()} ${studentLastName.toUpperCase()}`;
+            idCardEnroll.textContent = enrollmentNo;
+            idCardProgram.textContent = program.toUpperCase();
+            idCardDob.textContent = dob;
+            idCardValidThru.textContent = validThru;
+            idCardPhoto.src = photoBase64;
+            idCardLogo.src = universityLogoBase64;
+
+            // 5. Update Data File (Ukrainian labels)
+            currentTxtContent = 
+`НАЗВА УНІВЕРСИТЕТУ: ${university}
+ІМ'Я СТУДЕНТА: ${studentFirstName} ${studentLastName}
+НОМЕР СТУДЕНТСЬКОГО КВИТКА: ${enrollmentNo}
+ПРОГРАМА: ${program}
+ДАТА ВИДАЧІ: ${today}
+СУМА ОПЛАТИ: ${randomAmount.toLocaleString('uk-UA')} ₴
+`;
+            dataFileContent.textContent = currentTxtContent;
+
+            // 6. Update Fee Receipt (Use Hryvnia ₴)
+            receiptUniversity.textContent = university;
+            receiptDate.textContent = today;
+            receiptEnroll.textContent = enrollmentNo;
+            receiptName.textContent = `${studentFirstName} ${studentLastName}`;
+            receiptProgram.textContent = program;
+            receiptAmount.textContent = `₴${randomAmount.toLocaleString('uk-UA')}.00`;
+            receiptTotal.textContent = `₴${randomAmount.toLocaleString('uk-UA')}.00`;
+            receiptLogo.src = universityLogoBase64;
+            receiptSignature.src = signatureBase64;
+            receiptSignature.classList.remove('loading-img');
+            
+            // 7. Update Class Schedule
+            scheduleUniversity.textContent = university;
+            scheduleName.textContent = `${studentFirstName} ${studentLastName}`;
+            scheduleEnroll.textContent = enrollmentNo;
+            scheduleSemester.textContent = semester;
+            scheduleDate.textContent = today;
+            scheduleLogo.src = universityLogoBase64;
+            scheduleSignature.src = signatureBase64;
+            scheduleSignature.classList.remove('loading-img');
+            
+            // Clear previous courses and add new ones (Ukrainian labels in columns, English content)
+            scheduleCoursesBody.innerHTML = '';
+            selectedCourses.forEach(course => {
+                const row = document.createElement('tr');
+                // Use alternating row background for readability
+                row.className = 'border-b hover:bg-indigo-50 transition-colors duration-150'; 
+                row.innerHTML = `
+                    <td class="py-2 px-2">${course.code}</td>
+                    <td class="py-2 px-2">${course.name}</td>
+                    <td class="py-2 px-2">${course.location}</td>
+                `;
+                scheduleCoursesBody.appendChild(row);
+            });
+            
+            // 8. Finalize UI State
+            generateBtn.disabled = false;
+            saveBtn.disabled = false;
+            btnText.textContent = 'Згенерувати Документи';
+            spinner.classList.add('hidden');
+            statusText.textContent = 'Документи готові! Натисніть "Зберегти", щоб завантажити.';
+            
+            // Animate previews
+            setTimeout(() => {
+                previewWrappers.forEach(el => el.classList.add('visible'));
+            }, 100);
+        });
+
+        // --- ZIP and PDF Save Logic (Логіка збереження в ZIP і PDF) ---
+        let zip;
+        saveBtn.addEventListener('click', async () => {
+            saveBtn.disabled = true;
+            statusText.textContent = 'Підготовка файлів...';
+
+            zip = new JSZip();
+
+            // Add all previews as PDFs
+            try {
+                statusText.textContent = 'Збереження PDF... (Посвідчення)';
+                await generateAndAddPdf('id-card-content', '01_posvidchennya_osoby.pdf');
+        
+                statusText.textContent = 'Збереження PDF... (Квитанція)';
+                await generateAndAddPdf('fee-receipt-content', '02_kvitantsiya_pro_oplatu.pdf');
+                
+                statusText.textContent = 'Збереження PDF... (Розклад)';
+                await generateAndAddPdf('class-schedule-content', '03_rozklad_zanat.pdf');
+
+                // Add the text file (with Ukrainian content)
+                zip.file('04_student_info.txt', currentTxtContent);
+
+                // Generate and download the zip file
+                statusText.textContent = 'Генерація ZIP-файлу...';
+            
+                zip.generateAsync({ type: 'blob' })
+                    .then(function(content) {
+                        const url = URL.createObjectURL(content);
+                        const a = document.createElement('a');
+                        a.href = url;
+            
+                         a.download = 'university_documents.zip';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        statusText.textContent = 'ZIP-файл успішно завантажено!';
+                    })
+                    .catch(error => {
+                        console.error('Error generating zip file:', error);
+                        showMessage("Сталася помилка під час завантаження файлу. Спробуйте ще раз.");
+                        statusText.textContent = 'Помилка збереження.';
+                    });
+            } catch (e) {
+                console.error("Critical error during PDF generation:", e);
+                showMessage("Критична помилка при створенні документів. Перевірте консоль.");
+                statusText.textContent = 'Помилка збереження.';
+            } finally {
+                saveBtn.disabled = false;
+            }
+        });
+        
+        // Initial setup on load
+        window.onload = () => {
+             // Display initial Ukrainian text for guidance
+            idCardUniversity.textContent = 'Університет';
+            idCardName.textContent = 'Ім\'я Студента';
+            idCardProgram.textContent = 'Програма';
+            idCardEnroll.textContent = '1234-5678-9012';
+            idCardDob.textContent = '01/01/2000';
+            idCardValidThru.textContent = '01/2028';
+            
+            receiptUniversity.textContent = 'Університет';
+            scheduleUniversity.textContent = 'Університет';
+            
+            receiptName.textContent = 'Ім\'я Студента';
+            receiptProgram.textContent = 'Програма';
+            receiptEnroll.textContent = '1234-5678-9012';
+            
+            scheduleName.textContent = 'Ім\'я Студента';
+            scheduleEnroll.textContent = '1234-5678-9012';
+            scheduleSemester.textContent = '2024-2025 Семестр';
+            // Use Ukrainian locale date format for initial display
+            scheduleDate.textContent = new Date().toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            // Initial input placeholders in Ukrainian
+            collegeInput.value = 'Натисніть "Згенерувати Документи"';
+            nameInput.value = 'Буде заповнено автоматично';
+            enrollInput.value = 'Буде заповнено автоматично';
+            programInput.value = 'Буде заповнено автоматично';
+        };
+    </script>
+</body>
+</html>
